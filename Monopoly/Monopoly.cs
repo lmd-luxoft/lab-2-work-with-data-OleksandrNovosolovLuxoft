@@ -1,149 +1,234 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Monopoly
 {
+    class Player : IEquatable<Player>
+    {
+        public Player(string name, int amount)
+        {
+            Name = name;
+            Amount = amount;
+        }
+
+        public string Name { get; }
+        public int Amount { get; }
+
+        public bool Equals(Player other)
+        {
+            if (other == null)
+            {
+                return false;
+            }
+
+            return Name == other.Name
+                && Amount == other.Amount;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if ((obj == null) || !this.GetType().Equals(obj.GetType()))
+            {
+                return false;
+            }
+
+            return Equals(obj as Player);
+        }
+
+        public override int GetHashCode()
+        {
+            return Amount.GetHashCode() + 17 * Name?.GetHashCode() ?? 0;
+        }
+    }
+
+    class Field : IEquatable<Field>
+    {
+        public Field(string name, Monopoly.MonopolyType monopolyType, int ownerId)
+        {
+            Name = name;
+            MonopolyType = monopolyType;
+            OwnerId = ownerId;
+        }
+
+        public string Name { get; }
+        public Monopoly.MonopolyType MonopolyType { get; }
+        public int OwnerId { get; }
+
+        public bool TryBuy(Player buyer, out Player owner)
+        {
+            return MonopolyType.TryBuy(buyer, this, out owner);
+        }
+
+        public bool TryRent(Player playerToRent, Player owner, out (Player Owner, Player RentedPlayer) parties)
+        {
+            return MonopolyType.TryRent(playerToRent, owner, this, out parties);
+        }
+
+        public bool Equals(Field other)
+        {
+            if (other == null)
+            {
+                return false;
+            }
+
+            return Name == other.Name
+                && MonopolyType == other.MonopolyType
+                && OwnerId == other.OwnerId;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if ((obj == null) || !this.GetType().Equals(obj.GetType()))
+            {
+                return false;
+            }
+
+            return Equals(obj as Player);
+        }
+
+        public override int GetHashCode()
+        {
+            return OwnerId.GetHashCode() + 17 * Name?.GetHashCode() ?? 0 + 256 * MonopolyType?.GetHashCode() ?? 0;
+        }
+    }
+
     class Monopoly
     {
-        public List<Tuple<string, int>> players = new List<Tuple<string, int>>();
-        public List<Tuple<string, Monopoly.Type, int, bool>> fields = new List<Tuple<string, Type, int, bool>>();
-        public Monopoly(string[] p, int v)
+        private readonly List<Player> _players = new List<Player>();
+        private readonly List<Field> _fields = new List<Field>();
+        public Monopoly(string[] names)
         {
-            for (int i = 0; i < v; i++)
+            for (int i = 0; i < names.Length; i++)
             {
-                players.Add(new Tuple<string,int>(p[i], 6000));     
+                _players.Add(new Player(names[i], 6000));     
             }
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("Ford", Monopoly.Type.AUTO, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("MCDonald", Monopoly.Type.FOOD, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("Lamoda", Monopoly.Type.CLOTHER, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("Air Baltic", Monopoly.Type.TRAVEL, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("Nordavia", Monopoly.Type.TRAVEL, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("Prison", Monopoly.Type.PRISON, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("MCDonald", Monopoly.Type.FOOD, 0, false));
-            fields.Add(new Tuple<string, Monopoly.Type, int, bool>("TESLA", Monopoly.Type.AUTO, 0, false));
+
+            _fields.Add(new Field("Ford", Monopoly.MonopolyType.AUTO, 0));
+            _fields.Add(new Field("MCDonald", Monopoly.MonopolyType.FOOD, 0));
+            _fields.Add(new Field("Lamoda", Monopoly.MonopolyType.CLOTHER, 0));
+            _fields.Add(new Field("Air Baltic", Monopoly.MonopolyType.TRAVEL, 0));
+            _fields.Add(new Field("Nordavia", Monopoly.MonopolyType.TRAVEL, 0));
+            _fields.Add(new Field("Prison", Monopoly.MonopolyType.PRISON, 0));
+            _fields.Add(new Field("MCDonald", Monopoly.MonopolyType.FOOD, 0));
+            _fields.Add(new Field("TESLA", Monopoly.MonopolyType.AUTO, 0));
         }
 
-        internal List<Tuple<string, int>> GetPlayersList()
+        internal List<Player> GetPlayersList()
         {
-            return players;
+            return _players;
         }
 
-        internal enum Type
+        internal class MonopolyType
         {
-            AUTO,
-            FOOD,
-            CLOTHER,
-            TRAVEL,
-            PRISON,
-            BANK
-        }
-
-        internal List<Tuple<string, Monopoly.Type, int, bool>> GetFieldsList()
-        {
-            return fields;
-        }
-
-        internal Tuple<string, Type, int, bool> GetFieldByName(string v)
-        {
-            return (from p in fields where p.Item1 == v select p).FirstOrDefault();
-        }
-
-        internal bool Buy(int v, Tuple<string, Type, int, bool> k)
-        {
-            var x = GetPlayerInfo(v);
-            int cash = 0;
-            switch(k.Item2)
+            private readonly int? _price;
+            private readonly int? _rentaIncome;
+            private readonly int? _rentaPrice;
+            private MonopolyType(int? price, int? rentaIncome, int? rentaPrice)
             {
-                case Type.AUTO:
-                    if (k.Item3 != 0)
-                        return false;
-                    cash = x.Item2 - 500;
-                    players[v - 1] = new Tuple<string, int>(x.Item1, cash);
-                    break;
-                case Type.FOOD:
-                    if (k.Item3 != 0)
-                        return false;
-                    cash = x.Item2 - 250;
-                    players[v - 1] = new Tuple<string, int>(x.Item1, cash);
-                    break;
-                case Type.TRAVEL:
-                    if (k.Item3 != 0)
-                        return false;
-                    cash = x.Item2 - 700;
-                    players[v - 1] = new Tuple<string, int>(x.Item1, cash);
-                    break;
-                case Type.CLOTHER:
-                    if (k.Item3 != 0)
-                        return false;
-                    cash = x.Item2 - 100;
-                    players[v - 1] = new Tuple<string, int>(x.Item1, cash);
-                    break;
-                default:
+                _price = price;
+                _rentaIncome = rentaIncome;
+                _rentaPrice = rentaPrice;
+            }
+            public static readonly MonopolyType AUTO = new MonopolyType(500, 250, 250);
+            public static readonly MonopolyType FOOD = new MonopolyType(250, 250, 250);
+            public static readonly MonopolyType CLOTHER = new MonopolyType(100, 1000, 100);
+            public static readonly MonopolyType TRAVEL = new MonopolyType(700, 300, 300);
+            public static readonly MonopolyType PRISON = new MonopolyType(null, 0, 1000);
+            public static readonly MonopolyType BANK = new MonopolyType(null, 0, 700);
+
+            public bool TryBuy(Player buyer, Field targetField, out Player owner)
+            {
+                owner = null;
+                if (targetField.OwnerId > 0 || !_price.HasValue)
+                {
                     return false;
+                }
+
+                owner = new Player(buyer.Name, buyer.Amount - _price.Value);
+                return true;
             }
-            int i = players.Select((item, index) => new { name = item.Item1, index = index })
-                .Where(n => n.name == x.Item1)
-                .Select(p => p.index).FirstOrDefault();
-            fields[i] = new Tuple<string, Type, int, bool>(k.Item1, k.Item2, v, k.Item4);
+
+            public bool TryRent(Player playerToRent, Player owner, Field targetField, out (Player Owner, Player RentedPlayer) parties)
+            {
+                parties = default;
+                if (targetField.OwnerId == 0)
+                {
+                    return false;
+                }
+
+                if (_rentaIncome > 0)
+                {
+                    owner = new Player(owner.Name, owner.Amount + _rentaIncome.Value);
+                }
+
+                if (_rentaPrice > 0)
+                {
+                    playerToRent = new Player(playerToRent.Name, playerToRent.Amount - _rentaPrice.Value);
+                }
+
+                parties = (owner, playerToRent);
+                return true;
+            }
+        }
+
+        internal List<Field> GetFieldsList()
+        {
+            return _fields;
+        }
+
+        internal Field GetFieldByName(string v)
+        {
+            return _fields.FirstOrDefault(p => p.Name == v);
+        }
+
+        internal bool Buy(int buyerId, Field targetField)
+        {
+            var buyer = GetPlayerInfo(buyerId);
+            int fieldIndex = _fields.IndexOf(targetField);
+            if (fieldIndex < 0)
+            {
+                return false;
+            }    
+
+            if (!targetField.TryBuy(buyer, out var owner))
+            {
+                return false;
+            }
+
+            SetPlayerInfo(buyerId, owner);
+            _fields[fieldIndex] = new Field(targetField.Name, targetField.MonopolyType, buyerId);
              return true;
         }
 
-        internal Tuple<string, int> GetPlayerInfo(int v)
+        internal Player GetPlayerInfo(int playerId)
         {
-            return players[v - 1];
+            return _players[playerId - 1];
         }
 
-        internal bool Renta(int v, Tuple<string, Type, int, bool> k)
+        internal void SetPlayerInfo(int playerId, Player player)
         {
-            var z = GetPlayerInfo(v);
-            Tuple<string, int> o = null;
-            switch(k.Item2)
+            _players[playerId - 1] = player;
+        }
+
+        internal bool Renta(int playerToRentId, Field targetField)
+        {
+            var playerToRent = GetPlayerInfo(playerToRentId);
+            var owner = GetPlayerInfo(targetField.OwnerId);
+
+            int fieldIndex = _fields.IndexOf(targetField);
+            if (fieldIndex < 0)
             {
-                case Type.AUTO:
-                    if (k.Item3 == 0)
-                        return false;
-                    o =  GetPlayerInfo(k.Item3);
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 250);
-                    o = new Tuple<string, int>(o.Item1,o.Item2 + 250);
-                    break;
-                case Type.FOOD:
-                    if (k.Item3 == 0)
-                        return false;
-                    o = GetPlayerInfo(k.Item3);
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 250);
-                    o = new Tuple<string, int>(o.Item1, o.Item2 + 250);
-
-                    break;
-                case Type.TRAVEL:
-                    if (k.Item3 == 0)
-                        return false;
-                    o = GetPlayerInfo(k.Item3);
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 300);
-                    o = new Tuple<string, int>(o.Item1, o.Item2 + 300);
-                    break;
-                case Type.CLOTHER:
-                    if (k.Item3 == 0)
-                        return false;
-                    o = GetPlayerInfo(k.Item3);
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 100);
-                    o = new Tuple<string, int>(o.Item1, o.Item2 + 1000);
-
-                    break;
-                case Type.PRISON:
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 1000);
-                    break;
-                case Type.BANK:
-                    z = new Tuple<string, int>(z.Item1, z.Item2 - 700);
-                    break;
-                default:
-                    return false;
+                return false;
             }
-            players[v - 1] = z;
-            if(o != null)
-                players[k.Item3 - 1] = o;
+
+            if (!targetField.TryRent(playerToRent, owner, out var parties))
+            {
+                return false;
+            }
+
+            SetPlayerInfo(playerToRentId, parties.RentedPlayer);
+            SetPlayerInfo(targetField.OwnerId, parties.Owner);
             return true;
         }
     }
